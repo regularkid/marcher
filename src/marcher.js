@@ -39,7 +39,7 @@ class Marcher
         let rayDir = this.CalculateScreenPointRay(x, y);
         let rayPos = new Vec3(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
         let distance = 0.0;
-        let maxDistance = 100.0;
+        let maxDistance = 30.0;
         let maxSurfaceDistance = 0.001;
 
         // Step ray until we hit sphere (distance to surface is tiny) or exceed max raycast distance
