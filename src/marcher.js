@@ -26,8 +26,19 @@ class Marcher
         {
             for (let x = 0; x < this.screenWidth; x++)
             {
+                let color32Bit = 0xFF000000;
+
+                let hitInfo = this.SphereCast(x, y);
+                if (hitInfo !== undefined)
+                {
+                    // Assume light source is camera for now + square dot so falloff is more dramatic
+                    let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
+                    let lightFactor = Math.max(Math.min(lightDot*lightDot, 1.0), 0.0);
+                    color32Bit |= Math.floor(lightFactor * 255.0);
+                }
+
                 // TEMP: Sphere hit = red, no sphere hit = black
-                this.framebuffer32Bit[(y * this.screenWidth) + x] = this.SphereCast(x, y) ? 0xFF0000FF : 0xFF000000;
+                this.framebuffer32Bit[(y * this.screenWidth) + x] = color32Bit;
             }
         }
 
@@ -48,22 +59,40 @@ class Marcher
             let sceneSDF = this.SceneSDF(rayPos);
             if (sceneSDF <= maxSurfaceDistance)
             {
-                return true;
+                // Estimate hit normal by averaging SDF sample of nearby positions
+                let normal = new Vec3(0, 0, 0);
+                normal.x = this.SceneSDF(new Vec3(rayPos.x + maxSurfaceDistance, rayPos.y, rayPos.z)) - 
+                           this.SceneSDF(new Vec3(rayPos.x - maxSurfaceDistance, rayPos.y, rayPos.z));
+                normal.y = this.SceneSDF(new Vec3(rayPos.x, rayPos.y + maxSurfaceDistance, rayPos.z)) - 
+                           this.SceneSDF(new Vec3(rayPos.x, rayPos.y - maxSurfaceDistance, rayPos.z));
+                normal.z = this.SceneSDF(new Vec3(rayPos.x, rayPos.y, rayPos.z + maxSurfaceDistance)) - 
+                           this.SceneSDF(new Vec3(rayPos.x, rayPos.y, rayPos.z - maxSurfaceDistance));
+                normal.NormalizeSelf();
+
+                let hitInfo =
+                {
+                    pos: rayPos,
+                    normal: normal
+                };
+
+                return hitInfo;
             }
 
             distance += sceneSDF;
             rayPos.AddToSelf(rayDir.Scale(sceneSDF));
         }
 
-        return false;
+        return undefined;
     }
 
     CalculateScreenPointRay(x, y)
     {
-        // View plane is 1 unit in front of camera, bottom -> top = -1 -> +1, left -> right = -aspectRatio > +aspectRatio
+        // View plane is 1 unit in front of camera
+        // bottom -> top = -1 -> +1
+        // left -> right = -aspectRatio > +aspectRatio
         let fwd = this.cameraFwd;
         let right = this.cameraRight.Scale(((x - this.screenHalfWidth) / this.screenHalfWidth) * this.aspectRatio);
-        let up = this.cameraUp.Scale((y - this.screenHalfHeight) / this.screenHalfHeight);
+        let up = this.cameraUp.Scale((this.screenHalfHeight - y) / this.screenHalfHeight);
 
         return fwd.Add(right.Add(up)).Normalize();
     }
