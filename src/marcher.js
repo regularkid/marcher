@@ -13,14 +13,34 @@ class Marcher
         this.framebuffer = ctx.getImageData(0, 0, this.screenWidth, this.screenHeight);
         this.framebuffer32Bit = new Uint32Array(this.framebuffer.data.buffer);
 
-        this.cameraPos = new Vec3(0, 0, 0);
-        this.cameraFwd = new Vec3(0, 0, -1);
+        this.cameraPos = new Vec3(0, 5, 0);
+        this.cameraFwd = new Vec3(0, -0.5, -1);
         this.cameraRight = new Vec3(1, 0, 0);
-        this.cameraUp = new Vec3(0, 1, 0);
+        this.cameraUp = this.cameraRight.Cross(this.cameraFwd);
+
+        this.objects = [];
+        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, .5, 3)));
+        this.objects.push(new Sphere(new Vec3(-7.0, 0, -10), 3.0));
+        this.objects.push(new Sphere(new Vec3(0, 1, -10), 3.0));
+
+        this.csgModes =
+        {
+            Union: 0,
+            Intersect: 1,
+            Difference: 2,
+            Taffy: 3,
+        },
+
+        this.csgMode = this.csgModes.Taffy;
     }
 
     Render()
     {
+        if (input.isTouchActive)
+        {
+            this.objects[0].center.x += input.dx * 0.05
+        }
+
         // Cast a ray for each screen pixel
         for (let y = 0; y < this.screenHeight; y++)
         {
@@ -33,7 +53,7 @@ class Marcher
                 {
                     // Assume light source is camera for now + square dot so falloff is more dramatic
                     let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
-                    let lightFactor = Math.max(Math.min(lightDot*lightDot, 1.0), 0.0);
+                    let lightFactor = 0.2 + Math.max(Math.min(lightDot, 1.0), 0.0)*0.8;
                     color32Bit |= Math.floor(lightFactor * 255.0);
                 }
 
@@ -99,12 +119,37 @@ class Marcher
 
     SceneSDF(p)
     {
-        // TEMP: Just position a sphere in front of the camera for now.
-        // TODO: Iterate all scene objects and combine SDF values (min, max, blend, cutout)
-        let sphereCenter = new Vec3(0, 0, -10);
-        let sphereRadius = 3.0;
+        let distance = this.objects[0].SDF(p);
 
-        let toSphere = sphereCenter.Sub(p);
-        return toSphere.Length() - sphereRadius;
+        for (let i = 1; i < this.objects.length; i++)
+        {
+            distance = this.CSG(distance, this.objects[i].SDF(p));
+        }
+        
+        return distance;
+    }
+
+    CSG(distance1, distance2)
+    {
+        if (this.csgMode === this.csgModes.Union)
+        {
+            return Math.min(distance1, distance2);
+        }
+        else if (this.csgMode === this.csgModes.Intersect)
+        {
+            return Math.max(distance1, distance2);
+        }
+        else if (this.csgMode === this.csgModes.Difference)
+        {
+            return Math.max(distance1, -distance2);
+        }
+        else if (this.csgMode === this.csgModes.Taffy)
+        {
+            let k = 5.0;
+            let h = Math.max(k - Math.abs(distance1 - distance2), 0.0) / k;
+            return Math.min(distance1, distance2) - h*h*h*k*(1.0/6.0);
+        }
+
+        console.log(`Unsupported CSG mode: ${this.csgMode}`);
     }
 }
