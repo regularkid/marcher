@@ -13,13 +13,14 @@ class Marcher
         this.framebuffer = ctx.getImageData(0, 0, this.screenWidth, this.screenHeight);
         this.framebuffer32Bit = new Uint32Array(this.framebuffer.data.buffer);
 
-        this.cameraPos = new Vec3(0, 5, 0);
+        this.cameraPos = new Vec3(0, 20, 30);
         this.cameraFwd = new Vec3(0, -0.5, -1);
         this.cameraRight = new Vec3(1, 0, 0);
         this.cameraUp = this.cameraRight.Cross(this.cameraFwd);
+        this.cameraFocalDist = 3.0;
 
         this.objects = [];
-        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, .5, 3)));
+        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, 1.5, 3)));
         this.objects.push(new Sphere(new Vec3(-7.0, 0, -10), 3.0));
         this.objects.push(new Sphere(new Vec3(0, 1, -10), 3.0));
 
@@ -38,7 +39,8 @@ class Marcher
     {
         if (input.isTouchActive)
         {
-            this.objects[0].center.x += input.dx * 0.05
+            this.objects[0].center.x += input.dx * 0.05;
+            this.objects[0].center.y -= input.dy * 0.05;
         }
 
         // Cast a ray for each screen pixel
@@ -70,7 +72,7 @@ class Marcher
         let rayDir = this.CalculateScreenPointRay(x, y);
         let rayPos = new Vec3(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
         let distance = 0.0;
-        let maxDistance = 30.0;
+        let maxDistance = 50.0;
         let maxSurfaceDistance = 0.001;
 
         // Step ray until we hit sphere (distance to surface is tiny) or exceed max raycast distance
@@ -107,10 +109,10 @@ class Marcher
 
     CalculateScreenPointRay(x, y)
     {
-        // View plane is 1 unit in front of camera
+        // View plane is 'focalDistance' units in front of camera
         // bottom -> top = -1 -> +1
         // left -> right = -aspectRatio > +aspectRatio
-        let fwd = this.cameraFwd;
+        let fwd = this.cameraFwd.Scale(this.cameraFocalDist);
         let right = this.cameraRight.Scale(((x - this.screenHalfWidth) / this.screenHalfWidth) * this.aspectRatio);
         let up = this.cameraUp.Scale((this.screenHalfHeight - y) / this.screenHalfHeight);
 
@@ -145,7 +147,7 @@ class Marcher
         }
         else if (this.csgMode === this.csgModes.Taffy)
         {
-            let k = 5.0;
+            let k = 10.0;
             let h = Math.max(k - Math.abs(distance1 - distance2), 0.0) / k;
             return Math.min(distance1, distance2) - h*h*h*k*(1.0/6.0);
         }
