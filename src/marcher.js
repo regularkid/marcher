@@ -26,7 +26,7 @@ class Marcher
         this.objects = [];
         this.objects.push(new Box(new Vec3(0, 11, 0), new Vec3(3, 1.5, 3), new Vec3(1, 0, 0)));
         this.objects.push(new Sphere(new Vec3(-7, 0, 0), 3.0, new Vec3(0, 1, 0)));
-        this.objects.push(new Sphere(new Vec3(6, 0, 0), 3.0, new Vec3(0, 0, 1)));
+        this.objects.push(new Sphere(new Vec3(6, 0, 1), 3.0, new Vec3(0, 0, 1)));
 
         this.touchObject = undefined;
 
@@ -36,20 +36,23 @@ class Marcher
             Intersect: 1,
             Difference: 2,
             Taffy: 3,
+            NumModes: 4,
         };
-        this.csgMode = this.csgModes.Taffy;
+        this.csgMode = this.csgModes.Union;
 
         this.shadingModes =
         {
-            Phong: 0,
+            Colors: 0,
             NumSteps: 1,
+            NumModes: 2,
         };
-        this.shadingMode = this.shadingModes.NumSteps;
+        this.shadingMode = this.shadingModes.Colors;
 
         this.movementModes =
         {
             Manual: 0,
             Automatic: 1,
+            NumModes: 2,
         }
         this.movementMode = this.movementModes.Automatic;
     }
@@ -76,13 +79,25 @@ class Marcher
         }
         else if (this.movementMode === this.movementModes.Automatic)
         {
-            this.objects[0].center.y = 4.0 + Math.sin(Date.now() * 0.005)*5.0;
+            if (this.csgMode === this.csgModes.Intersect ||
+                this.csgMode === this.csgModes.Difference)
+            {
+                this.objects[0].center.y = Math.sin(Date.now() * 0.005)*1.0;
 
-            this.objects[1].center.x = 0.0 + Math.sin(Date.now() * 0.002)*6.0;            
-            
-            this.objects[2].center.x = 0.0 + Math.cos(Date.now() * 0.001)*8.0;
-            this.objects[2].center.y = 3.0 + Math.sin(Date.now() * 0.001)*6.0;
-            //this.objects[2].center.z = 0.0 + Math.sin(Date.now() * 0.002)*3.0;
+                this.objects[1].center.x = Math.sin(Date.now() * 0.002)*1.0;
+                
+                this.objects[2].center.x = Math.cos(Date.now() * 0.001)*1.0;
+                this.objects[2].center.y = Math.sin(Date.now() * 0.001)*1.0;
+            }
+            else
+            {
+                this.objects[0].center.y = 3.0 + Math.sin(Date.now() * 0.005)*5.0;
+
+                this.objects[1].center.x = 0.0 + Math.sin(Date.now() * 0.002)*6.0;
+                
+                this.objects[2].center.x = 0.0 + Math.cos(Date.now() * 0.001)*8.0;
+                this.objects[2].center.y = 3.0 + Math.sin(Date.now() * 0.001)*6.0;
+            }
         }
     }
 
@@ -126,7 +141,7 @@ class Marcher
                 let hitInfo = this.SphereCast(x, y);
                 if (hitInfo !== undefined)
                 {
-                    if (this.shadingMode === this.shadingModes.Phong)
+                    if (this.shadingMode === this.shadingModes.Colors)
                     {
                         // Assume light source is camera for now + square dot so falloff is more dramatic
                         let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
@@ -268,5 +283,24 @@ class Marcher
         normal.NormalizeSelf();
 
         return normal;
+    }
+
+    ToggleMovementMode()
+    {
+        this.movementMode = (this.movementMode + 1) % this.movementModes.NumModes;
+
+        this.objects[0].center = new Vec3(0, 11, 0);
+        this.objects[1].center = new Vec3(-7, 0, 0);
+        this.objects[2].center = new Vec3(6, 0, 1);
+    }
+
+    ToggleShadingMode()
+    {
+        this.shadingMode = (this.shadingMode + 1) % this.shadingModes.NumModes;
+    }
+
+    ToggleCSGMode()
+    {
+        this.csgMode = (this.csgMode + 1) % this.csgModes.NumModes;
     }
 }
