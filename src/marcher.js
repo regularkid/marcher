@@ -30,30 +30,16 @@ class Marcher
 
         this.touchObject = undefined;
 
-        this.csgModes =
-        {
-            Union: 0,
-            Intersect: 1,
-            Difference: 2,
-            Taffy: 3,
-            NumModes: 4,
-        };
+        this.csgModes = {Union: 0, Intersect: 1, Difference: 2, Taffy: 3, NumModes: 4};
+        this.csgModeNames = ["Union", "Intersect", "Difference", "Taffy"];
         this.csgMode = this.csgModes.Union;
 
-        this.shadingModes =
-        {
-            Colors: 0,
-            NumSteps: 1,
-            NumModes: 2,
-        };
+        this.shadingModes = {Colors: 0, NumSteps: 1, NumModes: 2};
+        this.shadingModeNames = ["Colors", "X-Ray"];
         this.shadingMode = this.shadingModes.Colors;
 
-        this.movementModes =
-        {
-            Manual: 0,
-            Automatic: 1,
-            NumModes: 2,
-        }
+        this.movementModes = {Manual: 0, Automatic: 1, NumModes: 2};
+        this.movementModeNames = ["Manual", "Automatic"];
         this.movementMode = this.movementModes.Automatic;
     }
 
@@ -61,8 +47,6 @@ class Marcher
     {
         if (this.movementMode === this.movementModes.Manual)
         {
-            //this.objects.forEach(object => object.center.z = 0);
-
             if (input.isTouchActive)
             {
                 if (input.isNewTouch)
@@ -79,22 +63,20 @@ class Marcher
         }
         else if (this.movementMode === this.movementModes.Automatic)
         {
+            // Intersect/Difference work better when objects are all close together
             if (this.csgMode === this.csgModes.Intersect ||
                 this.csgMode === this.csgModes.Difference)
             {
-                this.objects[0].center.y = Math.sin(Date.now() * 0.005)*1.0;
-
-                this.objects[1].center.x = Math.sin(Date.now() * 0.002)*1.0;
-                
-                this.objects[2].center.x = Math.cos(Date.now() * 0.001)*1.0;
-                this.objects[2].center.y = Math.sin(Date.now() * 0.001)*1.0;
+                this.objects[0].center.y = Math.sin(Date.now() * 0.005);
+                this.objects[1].center.x = Math.sin(Date.now() * 0.002);                
+                this.objects[2].center.x = Math.cos(Date.now() * 0.001);
+                this.objects[2].center.y = Math.sin(Date.now() * 0.001);
             }
+            // Union/Taffy work better when objects move far apart from each other
             else
             {
                 this.objects[0].center.y = 3.0 + Math.sin(Date.now() * 0.005)*5.0;
-
-                this.objects[1].center.x = 0.0 + Math.sin(Date.now() * 0.002)*6.0;
-                
+                this.objects[1].center.x = 0.0 + Math.sin(Date.now() * 0.002)*6.0;                
                 this.objects[2].center.x = 0.0 + Math.cos(Date.now() * 0.001)*8.0;
                 this.objects[2].center.y = 3.0 + Math.sin(Date.now() * 0.001)*6.0;
             }
@@ -109,6 +91,7 @@ class Marcher
         let rayPos = new Vec3(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
         let distance = 0.0;
 
+        // Walk ray until we are within 'maxTouchDistance' of an object's surface
         while (distance < this.maxCastDistance)
         {
             let sceneSDF = Number.MAX_VALUE;
@@ -137,6 +120,7 @@ class Marcher
             for (let x = 0; x < this.screenWidth; x++)
             {
                 let color32Bit = 0xFF000000;
+                let r, g, b = 1.0;
 
                 let hitInfo = this.SphereCast(x, y);
                 if (hitInfo !== undefined)
@@ -146,22 +130,21 @@ class Marcher
                         // Assume light source is camera for now + square dot so falloff is more dramatic
                         let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
                         let lightFactor = 0.2 + Math.max(Math.min(lightDot, 1.0), 0.0)*0.8;
-                        let r = Math.floor(lightFactor * 255.0 * hitInfo.color.x);
-                        let g = Math.floor(lightFactor * 255.0 * hitInfo.color.y);
-                        let b = Math.floor(lightFactor * 255.0 * hitInfo.color.z);
-                        color32Bit |= r | (g << 8) | (b << 16);
+                        r = Math.floor(lightFactor * 255.0 * hitInfo.color.x);
+                        g = Math.floor(lightFactor * 255.0 * hitInfo.color.y);
+                        b = Math.floor(lightFactor * 255.0 * hitInfo.color.z);
                     }
                     else if (this.shadingMode === this.shadingModes.NumSteps)
                     {
                         let numStepsFactor = Math.min(hitInfo.numSteps / 20.0, 1.0);
-                        let r = Math.floor(numStepsFactor * 0.0);
-                        let g = Math.floor(numStepsFactor * 255.0);
-                        let b = Math.floor(numStepsFactor * 96.0);
-                        color32Bit |= r | (g << 8) | (b << 16);
+                        r = Math.floor(numStepsFactor * 0.0);
+                        g = Math.floor(numStepsFactor * 255.0);
+                        b = Math.floor(numStepsFactor * 96.0);
                     }
+
+                    color32Bit |= r | (g << 8) | (b << 16);
                 }
 
-                // TEMP: Sphere hit = red, no sphere hit = black
                 this.framebuffer32Bit[(y * this.screenWidth) + x] = color32Bit;
             }
         }
@@ -176,7 +159,7 @@ class Marcher
         let distance = 0.0;
         let numSteps = 0;
 
-        // Step ray until we hit sphere (distance to surface is tiny) or exceed max raycast distance
+        // Step ray until we hit something (distance to surface is tiny) or exceed max raycast distance
         while (distance < this.maxCastDistance)
         {
             let sceneInfo = this.SceneInfo(rayPos);
@@ -223,6 +206,7 @@ class Marcher
             let objectDistance = this.objects[i].SDF(p);
             let objectColor = this.objects[i].color;
 
+            // CSG Modes:
             if (this.csgMode === this.csgModes.Union)
             {
                 if (objectDistance < distance)
@@ -289,18 +273,16 @@ class Marcher
     {
         this.movementMode = (this.movementMode + 1) % this.movementModes.NumModes;
 
+        // Reset object positions whenever we set movement mode
         this.objects[0].center = new Vec3(0, 11, 0);
         this.objects[1].center = new Vec3(-7, 0, 0);
         this.objects[2].center = new Vec3(6, 0, 1);
     }
 
-    ToggleShadingMode()
-    {
-        this.shadingMode = (this.shadingMode + 1) % this.shadingModes.NumModes;
-    }
+    ToggleShadingMode() { this.shadingMode = (this.shadingMode + 1) % this.shadingModes.NumModes; }
+    ToggleCSGMode() { this.csgMode = (this.csgMode + 1) % this.csgModes.NumModes; }
 
-    ToggleCSGMode()
-    {
-        this.csgMode = (this.csgMode + 1) % this.csgModes.NumModes;
-    }
+    GetMovementModeName() { return this.movementModeNames[this.movementMode]; }
+    GetShadingModeName() { return this.shadingModeNames[this.shadingMode]; }
+    GetCSGModeName() { return this.csgModeNames[this.csgMode]; }
 }
