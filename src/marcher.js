@@ -215,10 +215,20 @@ class Marcher
             else if (this.csgMode === this.csgModes.Taffy)
             {
                 // From: https://www.iquilezles.org/www/articles/smin/smin.htm
+                let absDistance = Math.abs(distance - objectDistance);
                 let k = 10.0;
-                let h = Math.max(k - Math.abs(distance - objectDistance), 0.0) / k;
+                let h = Math.max(k - absDistance, 0.0) / k;
+
+                if (objectDistance < distance)
+                {
+                    color = objectColor;
+                }
+                else
+                {
+                    color = color.Lerp(objectColor, h);
+                }
+
                 distance = Math.min(distance, objectDistance) - h*h*h*k*(1.0/6.0);
-                color = color.Lerp(objectColor, h);
             }
         }
         
