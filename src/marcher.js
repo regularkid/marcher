@@ -18,15 +18,15 @@ class Marcher
         this.maxTouchDistance = 2.0;
 
         this.cameraPos = new Vec3(0, 20, 30);
-        this.cameraFwd = new Vec3(0, -0.5, -1);
+        this.cameraFwd = new Vec3(0, -0.55, -1);
         this.cameraRight = new Vec3(1, 0, 0);
         this.cameraUp = this.cameraRight.Cross(this.cameraFwd);
         this.cameraFocalDist = 3.0;
 
         this.objects = [];
-        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, 1.5, 3), new Vec3(1, 0, 0)));
-        this.objects.push(new Sphere(new Vec3(-7.0, 0, -10), 3.0, new Vec3(0, 1, 0)));
-        this.objects.push(new Sphere(new Vec3(0, 1, -10), 3.0, new Vec3(0, 0, 1)));
+        this.objects.push(new Box(new Vec3(0, 11, 0), new Vec3(3, 1.5, 3), new Vec3(1, 0, 0)));
+        this.objects.push(new Sphere(new Vec3(-7, 0, 0), 3.0, new Vec3(0, 1, 0)));
+        this.objects.push(new Sphere(new Vec3(6, 0, 0), 3.0, new Vec3(0, 0, 1)));
 
         this.touchObject = undefined;
 
@@ -37,7 +37,6 @@ class Marcher
             Difference: 2,
             Taffy: 3,
         };
-
         this.csgMode = this.csgModes.Taffy;
 
         this.shadingModes =
@@ -45,24 +44,45 @@ class Marcher
             Phong: 0,
             NumSteps: 1,
         };
+        this.shadingMode = this.shadingModes.NumSteps;
 
-        this.shadingMode = this.shadingModes.Phong;
+        this.movementModes =
+        {
+            Manual: 0,
+            Automatic: 1,
+        }
+        this.movementMode = this.movementModes.Automatic;
     }
 
     Update(dt)
     {
-        if (input.isTouchActive)
+        if (this.movementMode === this.movementModes.Manual)
         {
-            if (input.isNewTouch)
-            {
-                this.touchObject = this.GetObjectAtTouchPos();
-            }
+            //this.objects.forEach(object => object.center.z = 0);
 
-            if (this.touchObject !== undefined)
+            if (input.isTouchActive)
             {
-                this.touchObject.center.x += input.dx * 0.05;
-                this.touchObject.center.y -= input.dy * 0.05;
+                if (input.isNewTouch)
+                {
+                    this.touchObject = this.GetObjectAtTouchPos();
+                }
+
+                if (this.touchObject !== undefined)
+                {
+                    this.touchObject.center.x += input.dx * 0.05;
+                    this.touchObject.center.y -= input.dy * 0.05;
+                }
             }
+        }
+        else if (this.movementMode === this.movementModes.Automatic)
+        {
+            this.objects[0].center.y = 4.0 + Math.sin(Date.now() * 0.005)*5.0;
+
+            this.objects[1].center.x = 0.0 + Math.sin(Date.now() * 0.002)*6.0;            
+            
+            this.objects[2].center.x = 0.0 + Math.cos(Date.now() * 0.001)*8.0;
+            this.objects[2].center.y = 3.0 + Math.sin(Date.now() * 0.001)*6.0;
+            //this.objects[2].center.z = 0.0 + Math.sin(Date.now() * 0.002)*3.0;
         }
     }
 
@@ -119,9 +139,9 @@ class Marcher
                     else if (this.shadingMode === this.shadingModes.NumSteps)
                     {
                         let numStepsFactor = Math.min(hitInfo.numSteps / 20.0, 1.0);
-                        let r = Math.floor(numStepsFactor * 255.0);
+                        let r = Math.floor(numStepsFactor * 0.0);
                         let g = Math.floor(numStepsFactor * 255.0);
-                        let b = Math.floor(numStepsFactor * 255.0);
+                        let b = Math.floor(numStepsFactor * 96.0);
                         color32Bit |= r | (g << 8) | (b << 16);
                     }
                 }
