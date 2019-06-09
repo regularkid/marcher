@@ -9,6 +9,7 @@ function GameLoop(curTime)
     let dt = Math.min((curTime - lastTime) / 1000.0, 0.2);	
     lastTime = curTime;
 
+    marcher.Update(dt);
     marcher.Render();
 
     // TEMP!

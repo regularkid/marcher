@@ -1,9 +1,10 @@
 class Box
 {
-    constructor(center, size)
+    constructor(center, size, color)
     {
         this.center = center;
         this.size = size;
+        this.color = color;
     }
 
     SDF(p)

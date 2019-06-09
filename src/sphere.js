@@ -1,9 +1,10 @@
 class Sphere
 {
-    constructor(center, radius)
+    constructor(center, radius, color)
     {
         this.center = center;
         this.radius = radius;
+        this.color = color;
     }
 
     SDF(p)

@@ -13,6 +13,10 @@ class Marcher
         this.framebuffer = ctx.getImageData(0, 0, this.screenWidth, this.screenHeight);
         this.framebuffer32Bit = new Uint32Array(this.framebuffer.data.buffer);
 
+        this.maxCastDistance = 50.0;
+        this.maxSurfaceDistance = 0.01;
+        this.maxTouchDistance = 2.0;
+
         this.cameraPos = new Vec3(0, 20, 30);
         this.cameraFwd = new Vec3(0, -0.5, -1);
         this.cameraRight = new Vec3(1, 0, 0);
@@ -20,9 +24,11 @@ class Marcher
         this.cameraFocalDist = 3.0;
 
         this.objects = [];
-        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, 1.5, 3)));
-        this.objects.push(new Sphere(new Vec3(-7.0, 0, -10), 3.0));
-        this.objects.push(new Sphere(new Vec3(0, 1, -10), 3.0));
+        this.objects.push(new Box(new Vec3(0, 0, -10), new Vec3(3, 1.5, 3), new Vec3(1, 0, 0)));
+        this.objects.push(new Sphere(new Vec3(-7.0, 0, -10), 3.0, new Vec3(0, 1, 0)));
+        this.objects.push(new Sphere(new Vec3(0, 1, -10), 3.0, new Vec3(0, 0, 1)));
+
+        this.touchObject = undefined;
 
         this.csgModes =
         {
@@ -30,19 +36,66 @@ class Marcher
             Intersect: 1,
             Difference: 2,
             Taffy: 3,
-        },
+        };
 
         this.csgMode = this.csgModes.Taffy;
+
+        this.shadingModes =
+        {
+            Phong: 0,
+            NumSteps: 1,
+        };
+
+        this.shadingMode = this.shadingModes.Phong;
+    }
+
+    Update(dt)
+    {
+        if (input.isTouchActive)
+        {
+            if (input.isNewTouch)
+            {
+                this.touchObject = this.GetObjectAtTouchPos();
+            }
+
+            if (this.touchObject !== undefined)
+            {
+                this.touchObject.center.x += input.dx * 0.05;
+                this.touchObject.center.y -= input.dy * 0.05;
+            }
+        }
+    }
+
+    GetObjectAtTouchPos()
+    {
+        let x = (input.x / 800.0) * this.screenWidth;
+        let y = (input.y / 600.0) * this.screenHeight;
+        let rayDir = this.CalculateScreenPointRay(x, y);
+        let rayPos = new Vec3(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
+        let distance = 0.0;
+
+        while (distance < this.maxCastDistance)
+        {
+            let sceneSDF = Number.MAX_VALUE;
+            for (let i = 0; i < this.objects.length; i++)
+            {
+                let objectDistance = this.objects[i].SDF(rayPos);
+                if (objectDistance <= this.maxTouchDistance)
+                {
+                    return this.objects[i];
+                }
+                sceneSDF = Math.min(sceneSDF, objectDistance);
+            }
+
+            distance += sceneSDF;
+            rayPos.AddToSelf(rayDir.Scale(sceneSDF));
+        }
+
+        return undefined;
     }
 
     Render()
     {
-        if (input.isTouchActive)
-        {
-            this.objects[0].center.x += input.dx * 0.05;
-            this.objects[0].center.y -= input.dy * 0.05;
-        }
-
         // Cast a ray for each screen pixel
         for (let y = 0; y < this.screenHeight; y++)
         {
@@ -53,10 +106,24 @@ class Marcher
                 let hitInfo = this.SphereCast(x, y);
                 if (hitInfo !== undefined)
                 {
-                    // Assume light source is camera for now + square dot so falloff is more dramatic
-                    let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
-                    let lightFactor = 0.2 + Math.max(Math.min(lightDot, 1.0), 0.0)*0.8;
-                    color32Bit |= Math.floor(lightFactor * 255.0);
+                    if (this.shadingMode === this.shadingModes.Phong)
+                    {
+                        // Assume light source is camera for now + square dot so falloff is more dramatic
+                        let lightDot = -hitInfo.normal.Dot(this.cameraFwd);
+                        let lightFactor = 0.2 + Math.max(Math.min(lightDot, 1.0), 0.0)*0.8;
+                        let r = Math.floor(lightFactor * 255.0 * hitInfo.color.x);
+                        let g = Math.floor(lightFactor * 255.0 * hitInfo.color.y);
+                        let b = Math.floor(lightFactor * 255.0 * hitInfo.color.z);
+                        color32Bit |= r | (g << 8) | (b << 16);
+                    }
+                    else if (this.shadingMode === this.shadingModes.NumSteps)
+                    {
+                        let numStepsFactor = Math.min(hitInfo.numSteps / 20.0, 1.0);
+                        let r = Math.floor(numStepsFactor * 255.0);
+                        let g = Math.floor(numStepsFactor * 255.0);
+                        let b = Math.floor(numStepsFactor * 255.0);
+                        color32Bit |= r | (g << 8) | (b << 16);
+                    }
                 }
 
                 // TEMP: Sphere hit = red, no sphere hit = black
@@ -72,36 +139,28 @@ class Marcher
         let rayDir = this.CalculateScreenPointRay(x, y);
         let rayPos = new Vec3(this.cameraPos.x, this.cameraPos.y, this.cameraPos.z);
         let distance = 0.0;
-        let maxDistance = 50.0;
-        let maxSurfaceDistance = 0.001;
+        let numSteps = 0;
 
         // Step ray until we hit sphere (distance to surface is tiny) or exceed max raycast distance
-        while (distance < maxDistance)
+        while (distance < this.maxCastDistance)
         {
-            let sceneSDF = this.SceneSDF(rayPos);
-            if (sceneSDF <= maxSurfaceDistance)
+            let sceneInfo = this.SceneInfo(rayPos);
+            if (sceneInfo.distance <= this.maxSurfaceDistance)
             {
-                // Estimate hit normal by averaging SDF sample of nearby positions
-                let normal = new Vec3(0, 0, 0);
-                normal.x = this.SceneSDF(new Vec3(rayPos.x + maxSurfaceDistance, rayPos.y, rayPos.z)) - 
-                           this.SceneSDF(new Vec3(rayPos.x - maxSurfaceDistance, rayPos.y, rayPos.z));
-                normal.y = this.SceneSDF(new Vec3(rayPos.x, rayPos.y + maxSurfaceDistance, rayPos.z)) - 
-                           this.SceneSDF(new Vec3(rayPos.x, rayPos.y - maxSurfaceDistance, rayPos.z));
-                normal.z = this.SceneSDF(new Vec3(rayPos.x, rayPos.y, rayPos.z + maxSurfaceDistance)) - 
-                           this.SceneSDF(new Vec3(rayPos.x, rayPos.y, rayPos.z - maxSurfaceDistance));
-                normal.NormalizeSelf();
-
                 let hitInfo =
                 {
                     pos: rayPos,
-                    normal: normal
+                    normal: this.GetEstimatedNormalAtPoint(rayPos),
+                    color: sceneInfo.color,
+                    numSteps: numSteps + 1
                 };
 
                 return hitInfo;
             }
 
-            distance += sceneSDF;
-            rayPos.AddToSelf(rayDir.Scale(sceneSDF));
+            rayPos.AddToSelf(rayDir.Scale(sceneInfo.distance));
+            distance += sceneInfo.distance;
+            numSteps++;
         }
 
         return undefined;
@@ -119,39 +178,65 @@ class Marcher
         return fwd.Add(right.Add(up)).Normalize();
     }
 
-    SceneSDF(p)
+    SceneInfo(p)
     {
         let distance = this.objects[0].SDF(p);
+        let color = this.objects[0].color;
 
         for (let i = 1; i < this.objects.length; i++)
         {
-            distance = this.CSG(distance, this.objects[i].SDF(p));
+            let objectDistance = this.objects[i].SDF(p);
+            let objectColor = this.objects[i].color;
+
+            if (this.csgMode === this.csgModes.Union)
+            {
+                if (objectDistance < distance)
+                {
+                    distance = objectDistance;
+                    color = objectColor;
+                }
+            }
+            else if (this.csgMode === this.csgModes.Intersect)
+            {
+                if (objectDistance > distance)
+                {
+                    distance = objectDistance;
+                    color = objectColor;
+                }
+            }
+            else if (this.csgMode === this.csgModes.Difference)
+            {
+                if (-objectDistance > distance)
+                {
+                    distance = -objectDistance;
+                    color = objectColor;
+                }
+            }
+            else if (this.csgMode === this.csgModes.Taffy)
+            {
+                // From: https://www.iquilezles.org/www/articles/smin/smin.htm
+                let k = 10.0;
+                let h = Math.max(k - Math.abs(distance - objectDistance), 0.0) / k;
+                distance = Math.min(distance, objectDistance) - h*h*h*k*(1.0/6.0);
+                color = color.Lerp(objectColor, h);
+            }
         }
         
-        return distance;
+        return { distance: distance, color: color };
     }
 
-    CSG(distance1, distance2)
+    GetEstimatedNormalAtPoint(p)
     {
-        if (this.csgMode === this.csgModes.Union)
-        {
-            return Math.min(distance1, distance2);
-        }
-        else if (this.csgMode === this.csgModes.Intersect)
-        {
-            return Math.max(distance1, distance2);
-        }
-        else if (this.csgMode === this.csgModes.Difference)
-        {
-            return Math.max(distance1, -distance2);
-        }
-        else if (this.csgMode === this.csgModes.Taffy)
-        {
-            let k = 10.0;
-            let h = Math.max(k - Math.abs(distance1 - distance2), 0.0) / k;
-            return Math.min(distance1, distance2) - h*h*h*k*(1.0/6.0);
-        }
+        // Estimate hit normal by averaging SDF sample of nearby positions
+        let normal = new Vec3(0, 0, 0);
+        normal.x = this.SceneInfo(new Vec3(p.x + this.maxSurfaceDistance, p.y, p.z)).distance - 
+                   this.SceneInfo(new Vec3(p.x - this.maxSurfaceDistance, p.y, p.z)).distance;
+        normal.y = this.SceneInfo(new Vec3(p.x, p.y + this.maxSurfaceDistance, p.z)).distance - 
+                   this.SceneInfo(new Vec3(p.x, p.y - this.maxSurfaceDistance, p.z)).distance;
+        normal.z = this.SceneInfo(new Vec3(p.x, p.y, p.z + this.maxSurfaceDistance)).distance - 
+                   this.SceneInfo(new Vec3(p.x, p.y, p.z - this.maxSurfaceDistance)).distance;
+        normal.NormalizeSelf();
 
-        console.log(`Unsupported CSG mode: ${this.csgMode}`);
+        return normal;
     }
 }
